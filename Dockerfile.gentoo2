@@ -1,0 +1,40 @@
+FROM gentoo/stage3-amd64:20181023
+
+RUN wget https://gentoo.osuosl.org/snapshots/portage-20181023.tar.xz && \
+	tar xvfp portage-20181023.tar.xz  -C /usr && \
+	rm portage-20181023.tar.xz
+
+RUN emerge vim dev-vcs/git nano
+
+RUN mkdir -p  /usr/local/portage/x86_64-w64-mingw32/{profiles,metadata} && \
+	echo -e 'masters = gentoo\nthin-manifests = true' >  /usr/local/portage/x86_64-w64-mingw32/layout.conf && \
+	echo 'crossdev' >   /usr/local/portage/x86_64-w64-mingw32/profiles/repo_name && \
+	chown -R portage:portage   /usr/local/portage/x86_64-w64-mingw32 && \
+	mkdir /etc/portage/repos.conf && \
+	echo "[crossdev]" >> /etc/portage/repos.conf/crossdev.conf && \
+	echo "location =  /usr/local/portage/x86_64-w64-mingw32" >> /etc/portage/repos.conf/crossdev.conf && \
+	echo "priority = 10" >> /etc/portage/repos.conf/crossdev.conf && \
+	echo "masters = gentoo" >> /etc/portage/repos.conf/crossdev.conf && \
+	echo "auto-sync = no" >> /etc/portage/repos.conf/crossdev.conf
+
+RUN emerge sys-devel/crossdev
+	# RUN crossdev --ov-output  /usr/local/portage/x86_64-w64-mingw32 -t i686-w64-mingw32
+RUN crossdev  -t x86_64-w64-mingw32
+RUN echo "cross-x86_64-w64-mingw32/mingw32-runtime libraries idl tools -selinux -multilib" >> /etc/portage/package.use/crossdev
+RUN echo -e 'ARCH=x86_64\nELIBC="mingw"\nKERNEL="Winnt"' > /usr/x86_64-w64-mingw32/etc/portage/profile/make.conf
+RUN USE="libraries idl tools" crossdev --ex-only --ex-pkg cross-x86_64-w64-mingw32/mingw64-runtime  -t x86_64-w64-mingw32
+RUN mkdir /usr/x86_64-w64-mingw32/etc/portage/env/ /usr/x86_64-w64-mingw32/etc/portage/package.env/
+RUN echo sys-libs/ncurses ncurses.conf > /usr/x86_64-w64-mingw32/etc/portage/package.env/curses
+RUN echo 'EXTRA_ECONF="--enable-term-driver --enable-sp-funcs --disable-shared --without-shared"' > /usr/x86_64-w64-mingw32/etc/portage/env/ncurses.conf
+RUN x86_64-w64-mingw32-emerge sys-libs/ncurses
+
+RUN echo -e 'USE="${USE} static-libs"' > /usr/x86_64-w64-mingw32/etc/portage/profile/make.conf
+
+RUN mkdir /usr/x86_64-w64-mingw32/etc/portage/package.mask
+RUN echo -e ">app-shells/bash-4.4" > /usr/x86_64-w64-mingw32/etc/portage/package.mask/bash
+
+RUN x86_64-w64-mingw32-emerge media-libs/libsdl2 media-libs/sdl2-image cppzmq
+
+RUN emerge cmake
+RUN cd /root && git clone https://github.com/glfw/glfw
+RUN cd /root/glfw && cmake -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32/mingw/ -DCMAKE_TOOLCHAIN_FILE=CMake/x86_64-w64-mingw32.cmake   -DWIN32=ON -DBUILD_SHARED_LIBS=OFF  build  . && make install
